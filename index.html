@@ -53,6 +53,14 @@
             transform-origin: center;
             transition: transform 0.2s;
         }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: none;
+            width: 100%;
+            height: 100%;
+        }
         #selectedColorBox {
             margin-top: 10px;
             width: 50px;
@@ -72,7 +80,7 @@
     </div>
     <div id="videoContainer">
         <video id="video" autoplay playsinline></video>
-        <canvas id="canvas"></canvas>
+        <canvas id="canvas"></canvas> <!-- Canvas for capturing setup image -->
     </div>
     <div id="selectedColorBox"></div>
     <button id="saveButton" style="display: none;">Save Selected Color</button>
@@ -80,6 +88,7 @@
 
     <script>
         const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
         const startButton = document.getElementById('startButton');
         const setupButton = document.getElementById('setupButton');
         const toggleCameraButton = document.getElementById('toggleCamera');
@@ -118,7 +127,7 @@
         // Zoom In Button
         zoomInButton.addEventListener('click', () => {
             if (trackCapabilities && trackCapabilities.zoom) {
-                zoomLevel = Math.min(zoomLevel + 0.1, trackCapabilities.zoom.max); // Max hardware zoom
+                zoomLevel = Math.min(zoomLevel + 0.1, trackCapabilities.zoom.max);
                 updateZoom();
             }
         });
@@ -126,7 +135,7 @@
         // Zoom Out Button
         zoomOutButton.addEventListener('click', () => {
             if (trackCapabilities && trackCapabilities.zoom) {
-                zoomLevel = Math.max(zoomLevel - 0.1, trackCapabilities.zoom.min); // Min hardware zoom
+                zoomLevel = Math.max(zoomLevel - 0.1, trackCapabilities.zoom.min);
                 updateZoom();
             }
         });
@@ -136,15 +145,45 @@
             track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
         }
 
+        // Capture setup image to select color
         function captureSetupImage() {
-            // Logic to capture image for color setup
+            if (!video.srcObject) {
+                startCamera();
+            }
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            canvas.style.display = 'block';
+            video.style.display = 'none';
+            saveButton.style.display = 'block';
+
+            canvas.addEventListener('click', selectColor);
         }
+
+        // Select color by clicking on the canvas
+        function selectColor(event) {
+            const context = canvas.getContext('2d');
+            const x = event.offsetX;
+            const y = event.offsetY;
+            const pixel = context.getImageData(x, y, 1, 1).data;
+            targetColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
+            selectedColorBox.style.backgroundColor = `rgb(${targetColor.r}, ${targetColor.g}, ${targetColor.b})`;
+        }
+
+        // Save selected color and hide canvas
+        saveButton.addEventListener('click', () => {
+            canvas.style.display = 'none';
+            video.style.display = 'block';
+            saveButton.style.display = 'none';
+        });
 
         function startDetection() {
             detectionActive = true;
             startButton.textContent = "Stop Detection";
             videoContainer.classList.add('activeDetection');
-            // Color detection logic here
+            detectColor();
         }
 
         function stopDetection() {
@@ -155,11 +194,48 @@
             stopCamera();
         }
 
+        function detectColor() {
+            if (!detectionActive) return;
+
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const frame = context.getImageData(0, 0, canvas.width, canvas.height).data;
+
+            const tolerance = 50;
+            let differentColorDetected = false;
+
+            for (let i = 0; i < frame.length; i += 4) {
+                const r = frame[i], g = frame[i + 1], b = frame[i + 2];
+                if (
+                    Math.abs(r - targetColor.r) >= tolerance ||
+                    Math.abs(g - targetColor.g) >= tolerance ||
+                    Math.abs(b - targetColor.b) >= tolerance
+                ) {
+                    differentColorDetected = true;
+                    break;
+                }
+            }
+
+            if (differentColorDetected) {
+                playSound();
+            }
+
+            detectionInterval = setTimeout(detectColor, 100);
+        }
+
+        function playSound() {
+            if (sound.paused) {
+                sound.play().catch(error => console.error("Playback error:", error));
+            }
+        }
+
         function startCamera() {
             const constraints = {
                 video: {
                     facingMode: useBackCamera ? { ideal: "environment" } : { ideal: "user" },
-                    zoom: zoomLevel // Set initial zoom level
+                    zoom: zoomLevel
                 }
             };
             navigator.mediaDevices.getUserMedia(constraints)
