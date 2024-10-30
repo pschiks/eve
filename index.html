@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reverse Color Detection App with Zoom</title>
+    <title>Reverse Color Detection App with Zoom Buttons</title>
     <style>
         body {
             display: flex;
@@ -20,6 +20,11 @@
             width: 100%;
             padding: 10px;
         }
+        #zoomContainer {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
         button {
             padding: 10px 20px;
             font-size: 16px;
@@ -31,6 +36,8 @@
         #startButton { background-color: #007bff; }
         #setupButton { background-color: #6c757d; }
         #saveButton { background-color: #28a745; }
+        #zoomInButton { background-color: #0056b3; }
+        #zoomOutButton { background-color: #0056b3; }
         #videoContainer {
             margin-top: 10px;
             width: 90%;
@@ -64,6 +71,10 @@
         <button id="setupButton">Setup Detection</button>
         <button id="startButton">Start Detection</button>
     </div>
+    <div id="zoomContainer" style="display: none;">
+        <button id="zoomInButton">Zoom In</button>
+        <button id="zoomOutButton">Zoom Out</button>
+    </div>
     <div id="videoContainer">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
@@ -78,6 +89,9 @@
         const startButton = document.getElementById('startButton');
         const setupButton = document.getElementById('setupButton');
         const saveButton = document.getElementById('saveButton');
+        const zoomContainer = document.getElementById('zoomContainer');
+        const zoomInButton = document.getElementById('zoomInButton');
+        const zoomOutButton = document.getElementById('zoomOutButton');
         const videoContainer = document.getElementById('videoContainer');
         const selectedColorBox = document.getElementById('selectedColorBox');
         const sound = document.getElementById('sound');
@@ -86,12 +100,9 @@
         let detectionInterval;
         let targetColor = { r: 0, g: 255, b: 0 }; // Default to green
 
-        // Zoom and pan variables
+        // Zoom variables
         let scale = 1;
-        let posX = 0;
-        let posY = 0;
-        let isDragging = false;
-        let startX, startY;
+        const scaleStep = 0.2;
 
         // Toggle Start/Stop Detection
         startButton.addEventListener('click', () => {
@@ -105,7 +116,11 @@
         // Setup Detection Area
         setupButton.addEventListener('click', captureSetupImage);
 
-        // Capture image for color selection with zoom and pan
+        // Zoom In and Zoom Out buttons
+        zoomInButton.addEventListener('click', () => zoomCanvas(scaleStep));
+        zoomOutButton.addEventListener('click', () => zoomCanvas(-scaleStep));
+
+        // Capture image for color selection
         function captureSetupImage() {
             if (!video.srcObject) {
                 startCamera();
@@ -115,72 +130,38 @@
             const context = canvas.getContext('2d');
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-            // Show the canvas for color selection
+            // Show the canvas and enable zoom controls
             canvas.style.display = 'block';
             video.style.display = 'none';
             saveButton.style.display = 'block';
+            zoomContainer.style.display = 'flex';
             canvas.addEventListener('click', selectColor);
 
-            // Add pinch-to-zoom and drag-to-pan listeners
-            canvas.addEventListener('wheel', zoomCanvas);
-            canvas.addEventListener('mousedown', startPan);
-            canvas.addEventListener('mousemove', panCanvas);
-            canvas.addEventListener('mouseup', endPan);
-            canvas.addEventListener('mouseleave', endPan);
+            // Reset zoom level for new setup
+            scale = 1;
+            updateCanvasTransform();
         }
 
         // Select color from clicked area
         function selectColor(event) {
             const context = canvas.getContext('2d');
             const rect = canvas.getBoundingClientRect();
-            const x = (event.clientX - rect.left - posX) / scale;
-            const y = (event.clientY - rect.top - posY) / scale;
+            const x = (event.clientX - rect.left) / scale;
+            const y = (event.clientY - rect.top) / scale;
             const pixel = context.getImageData(x, y, 1, 1).data;
             targetColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
             selectedColorBox.style.backgroundColor = `rgb(${targetColor.r}, ${targetColor.g}, ${targetColor.b})`;
         }
 
         // Zoom function for canvas
-        function zoomCanvas(event) {
-            event.preventDefault();
-            const zoomIntensity = 0.1;
-            const oldScale = scale;
-            scale += event.deltaY < 0 ? zoomIntensity : -zoomIntensity;
-            scale = Math.max(scale, 1); // Minimum zoom level
-
-            // Adjust the position to keep the zoom centered on the cursor
-            const rect = canvas.getBoundingClientRect();
-            const offsetX = (event.clientX - rect.left - posX) * (scale - oldScale);
-            const offsetY = (event.clientY - rect.top - posY) * (scale - oldScale);
-            posX -= offsetX;
-            posY -= offsetY;
-
+        function zoomCanvas(step) {
+            scale = Math.max(1, scale + step); // Ensure minimum zoom level of 1
             updateCanvasTransform();
         }
 
-        // Start panning
-        function startPan(event) {
-            isDragging = true;
-            startX = event.clientX - posX;
-            startY = event.clientY - posY;
-        }
-
-        // Pan canvas
-        function panCanvas(event) {
-            if (!isDragging) return;
-            posX = event.clientX - startX;
-            posY = event.clientY - startY;
-            updateCanvasTransform();
-        }
-
-        // End panning
-        function endPan() {
-            isDragging = false;
-        }
-
-        // Update canvas transform for zoom and pan
+        // Update canvas transform for zoom
         function updateCanvasTransform() {
-            canvas.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
+            canvas.style.transform = `scale(${scale})`;
         }
 
         // Save selected color and return to detection mode
@@ -188,9 +169,9 @@
             canvas.style.display = 'none';
             video.style.display = 'block';
             saveButton.style.display = 'none';
+            zoomContainer.style.display = 'none';
         });
 
-        // Other functions (startDetection, stopDetection, playSound, startCamera, detectColor) remain unchanged
         // Camera start with back camera
         function startCamera() {
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
