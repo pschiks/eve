@@ -27,6 +27,8 @@
         #setupButton { background-color: #6c757d; }
         #saveButton { background-color: #28a745; }
         #toggleCamera { background-color: #ff8800; }
+        #zoomInButton { background-color: #198754; }
+        #zoomOutButton { background-color: #dc3545; }
         #videoContainer {
             margin-top: 10px;
             width: 90%;
@@ -40,6 +42,8 @@
         #video {
             width: 100%;
             height: auto;
+            transform-origin: center; /* Important for zoom scaling */
+            transition: transform 0.2s;
         }
         #zoomCanvas, #canvas {
             position: absolute;
@@ -60,6 +64,8 @@
     <button id="setupButton">Setup Detection</button>
     <button id="startButton">Start Detection</button>
     <button id="toggleCamera">Toggle Camera</button>
+    <button id="zoomInButton">+</button>
+    <button id="zoomOutButton">-</button>
     <div id="videoContainer">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
@@ -76,6 +82,8 @@
         const startButton = document.getElementById('startButton');
         const setupButton = document.getElementById('setupButton');
         const toggleCameraButton = document.getElementById('toggleCamera');
+        const zoomInButton = document.getElementById('zoomInButton');
+        const zoomOutButton = document.getElementById('zoomOutButton');
         const saveButton = document.getElementById('saveButton');
         const videoContainer = document.getElementById('videoContainer');
         const selectedColorBox = document.getElementById('selectedColorBox');
@@ -85,6 +93,7 @@
         let detectionInterval;
         let targetColor = { r: 0, g: 255, b: 0 }; // Default to green
         let useBackCamera = true;
+        let zoomLevel = 1; // Default zoom level
 
         // Toggle Start/Stop Detection
         startButton.addEventListener('click', () => {
@@ -106,6 +115,23 @@
             }
             startCamera();
         });
+
+        // Zoom In Button
+        zoomInButton.addEventListener('click', () => {
+            zoomLevel = Math.min(zoomLevel + 0.2, 3); // Cap zoom level to 3x
+            updateZoom();
+        });
+
+        // Zoom Out Button
+        zoomOutButton.addEventListener('click', () => {
+            zoomLevel = Math.max(zoomLevel - 0.2, 1); // Minimum zoom level 1x
+            updateZoom();
+        });
+
+        // Update zoom scale on video
+        function updateZoom() {
+            video.style.transform = `scale(${zoomLevel})`;
+        }
 
         // Capture image for color selection
         function captureSetupImage() {
