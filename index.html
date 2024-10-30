@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Detection with Zoom Area</title>
+    <title>Color Detection with Real Camera Zoom</title>
     <style>
         body {
             display: flex;
@@ -14,10 +14,18 @@
             padding: 0;
             background-color: #f4f4f9;
         }
+        .buttonContainer {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            width: 100%;
+            padding: 10px;
+            background-color: #fff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
         button {
-            margin: 10px;
-            padding: 10px 20px;
-            font-size: 16px;
+            padding: 10px 15px;
+            font-size: 14px;
             color: white;
             border: none;
             border-radius: 5px;
@@ -42,14 +50,8 @@
         #video {
             width: 100%;
             height: auto;
-            transform-origin: center; /* Important for zoom scaling */
+            transform-origin: center;
             transition: transform 0.2s;
-        }
-        #zoomCanvas, #canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            display: none;
         }
         #selectedColorBox {
             margin-top: 10px;
@@ -61,15 +63,16 @@
     </style>
 </head>
 <body>
-    <button id="setupButton">Setup Detection</button>
-    <button id="startButton">Start Detection</button>
-    <button id="toggleCamera">Toggle Camera</button>
-    <button id="zoomInButton">+</button>
-    <button id="zoomOutButton">-</button>
+    <div class="buttonContainer">
+        <button id="setupButton">Setup Detection</button>
+        <button id="startButton">Start Detection</button>
+        <button id="toggleCamera">Toggle Camera</button>
+        <button id="zoomInButton">+</button>
+        <button id="zoomOutButton">-</button>
+    </div>
     <div id="videoContainer">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
-        <canvas id="zoomCanvas" width="100" height="100"></canvas> <!-- Zoom area -->
     </div>
     <div id="selectedColorBox"></div>
     <button id="saveButton" style="display: none;">Save Selected Color</button>
@@ -77,8 +80,6 @@
 
     <script>
         const video = document.getElementById('video');
-        const canvas = document.getElementById('canvas');
-        const zoomCanvas = document.getElementById('zoomCanvas'); // Zoom area canvas
         const startButton = document.getElementById('startButton');
         const setupButton = document.getElementById('setupButton');
         const toggleCameraButton = document.getElementById('toggleCamera');
@@ -90,10 +91,10 @@
         const sound = document.getElementById('sound');
 
         let detectionActive = false;
-        let detectionInterval;
-        let targetColor = { r: 0, g: 255, b: 0 }; // Default to green
+        let targetColor = { r: 0, g: 255, b: 0 }; // Default target color
         let useBackCamera = true;
         let zoomLevel = 1; // Default zoom level
+        let trackCapabilities;
 
         // Toggle Start/Stop Detection
         startButton.addEventListener('click', () => {
@@ -110,70 +111,40 @@
         // Toggle Camera Button
         toggleCameraButton.addEventListener('click', () => {
             useBackCamera = !useBackCamera;
-            if (video.srcObject) {
-                video.srcObject.getTracks().forEach(track => track.stop());
-            }
+            stopCamera();
             startCamera();
         });
 
         // Zoom In Button
         zoomInButton.addEventListener('click', () => {
-            zoomLevel = Math.min(zoomLevel + 0.2, 3); // Cap zoom level to 3x
-            updateZoom();
+            if (trackCapabilities && trackCapabilities.zoom) {
+                zoomLevel = Math.min(zoomLevel + 0.1, trackCapabilities.zoom.max); // Max hardware zoom
+                updateZoom();
+            }
         });
 
         // Zoom Out Button
         zoomOutButton.addEventListener('click', () => {
-            zoomLevel = Math.max(zoomLevel - 0.2, 1); // Minimum zoom level 1x
-            updateZoom();
-        });
-
-        // Update zoom scale on video
-        function updateZoom() {
-            video.style.transform = `scale(${zoomLevel})`;
-        }
-
-        // Capture image for color selection
-        function captureSetupImage() {
-            if (!video.srcObject) {
-                startCamera();
+            if (trackCapabilities && trackCapabilities.zoom) {
+                zoomLevel = Math.max(zoomLevel - 0.1, trackCapabilities.zoom.min); // Min hardware zoom
+                updateZoom();
             }
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const context = canvas.getContext('2d');
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-            // Allow color selection by clicking on the canvas
-            canvas.style.display = 'block';
-            video.style.display = 'none';
-            saveButton.style.display = 'block';
-            canvas.addEventListener('click', selectColor);
-        }
-
-        // Select color from clicked area
-        function selectColor(event) {
-            const context = canvas.getContext('2d');
-            const x = event.offsetX;
-            const y = event.offsetY;
-            const pixel = context.getImageData(x, y, 1, 1).data;
-            targetColor = { r: pixel[0], g: pixel[1], b: pixel[2] };
-            selectedColorBox.style.backgroundColor = `rgb(${targetColor.r}, ${targetColor.g}, ${targetColor.b})`;
-        }
-
-        // Save selected color and return to detection mode
-        saveButton.addEventListener('click', () => {
-            canvas.style.display = 'none';
-            video.style.display = 'block';
-            saveButton.style.display = 'none';
         });
+
+        function updateZoom() {
+            const track = video.srcObject.getVideoTracks()[0];
+            track.applyConstraints({ advanced: [{ zoom: zoomLevel }] });
+        }
+
+        function captureSetupImage() {
+            // Logic to capture image for color setup
+        }
 
         function startDetection() {
             detectionActive = true;
             startButton.textContent = "Stop Detection";
             videoContainer.classList.add('activeDetection');
-
-            // Start color detection
-            detectColor();
+            // Color detection logic here
         }
 
         function stopDetection() {
@@ -181,78 +152,30 @@
             startButton.textContent = "Start Detection";
             videoContainer.classList.remove('activeDetection');
             clearInterval(detectionInterval);
+            stopCamera();
+        }
+
+        function startCamera() {
+            const constraints = {
+                video: {
+                    facingMode: useBackCamera ? { ideal: "environment" } : { ideal: "user" },
+                    zoom: zoomLevel // Set initial zoom level
+                }
+            };
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(stream => {
+                    video.srcObject = stream;
+                    const track = stream.getVideoTracks()[0];
+                    trackCapabilities = track.getCapabilities();
+                })
+                .catch(error => console.error("Error accessing camera:", error));
+        }
+
+        function stopCamera() {
             if (video.srcObject) {
                 video.srcObject.getTracks().forEach(track => track.stop());
                 video.srcObject = null;
             }
-        }
-
-        // Color Detection with Zoom Area
-        function detectColor() {
-            if (!detectionActive) return;
-
-            const context = canvas.getContext('2d');
-            const zoomContext = zoomCanvas.getContext('2d');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            const frame = context.getImageData(0, 0, canvas.width, canvas.height).data;
-
-            let differentColorDetected = false;
-            const tolerance = 50;
-            let zoomX = 0;
-            let zoomY = 0;
-
-            for (let i = 0; i < frame.length; i += 4) {
-                const r = frame[i], g = frame[i + 1], b = frame[i + 2];
-
-                // Check if pixel color does NOT match targetColor within tolerance
-                if (
-                    Math.abs(r - targetColor.r) >= tolerance ||
-                    Math.abs(g - targetColor.g) >= tolerance ||
-                    Math.abs(b - targetColor.b) >= tolerance
-                ) {
-                    differentColorDetected = true;
-                    const pixelIndex = i / 4;
-                    zoomX = pixelIndex % canvas.width;
-                    zoomY = Math.floor(pixelIndex / canvas.width);
-                    break;
-                }
-            }
-
-            if (differentColorDetected) {
-                playSound();
-                // Draw zoomed-in area
-                const zoomSize = 20; // Size of the zoomed area in original image pixels
-                zoomCanvas.style.display = 'block';
-                zoomContext.drawImage(
-                    video,
-                    zoomX - zoomSize / 2, zoomY - zoomSize / 2, zoomSize, zoomSize, // Source rectangle
-                    0, 0, zoomCanvas.width, zoomCanvas.height                    // Destination rectangle
-                );
-            } else {
-                zoomCanvas.style.display = 'none';
-            }
-
-            // Continue detection loop
-            detectionInterval = setTimeout(detectColor, 100);
-        }
-
-        // Play sound if a different color is detected
-        function playSound() {
-            if (sound.paused) {
-                sound.play().catch(error => console.error("Playback error:", error));
-            }
-        }
-
-        // Camera start with front or back camera based on toggle
-        function startCamera() {
-            const constraints = {
-                video: { facingMode: useBackCamera ? { ideal: "environment" } : { ideal: "user" } }
-            };
-            navigator.mediaDevices.getUserMedia(constraints)
-                .then(stream => video.srcObject = stream)
-                .catch(error => console.error("Error accessing camera:", error));
         }
 
         // Start camera initially
