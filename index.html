@@ -14,8 +14,13 @@
             padding: 0;
             background-color: #f4f4f9;
         }
+        #buttonContainer {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            padding: 10px;
+        }
         button {
-            margin: 10px;
             padding: 10px 20px;
             font-size: 16px;
             color: white;
@@ -51,8 +56,10 @@
     </style>
 </head>
 <body>
-    <button id="setupButton">Setup Detection</button>
-    <button id="startButton">Start Detection</button>
+    <div id="buttonContainer">
+        <button id="setupButton">Setup Detection</button>
+        <button id="startButton">Start Detection</button>
+    </div>
     <div id="videoContainer">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
@@ -181,9 +188,9 @@
             }
         }
 
-        // Camera start
+        // Camera start with back camera
         function startCamera() {
-            navigator.mediaDevices.getUserMedia({ video: true })
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
                 .then(stream => video.srcObject = stream)
                 .catch(error => console.error("Error accessing camera:", error));
         }
