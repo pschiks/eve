@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reverse Color Detection App with Camera Toggle</title>
+    <title>Color Detection with Zoom Area</title>
     <style>
         body {
             display: flex;
@@ -41,13 +41,18 @@
             width: 100%;
             height: auto;
         }
+        #zoomCanvas, #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            display: none;
+        }
         #selectedColorBox {
             margin-top: 10px;
             width: 50px;
             height: 50px;
             border: 2px solid #000;
         }
-        #canvas { display: none; }
         .activeDetection { border-color: #28a745; }
     </style>
 </head>
@@ -58,6 +63,7 @@
     <div id="videoContainer">
         <video id="video" autoplay playsinline></video>
         <canvas id="canvas"></canvas>
+        <canvas id="zoomCanvas" width="100" height="100"></canvas> <!-- Zoom area -->
     </div>
     <div id="selectedColorBox"></div>
     <button id="saveButton" style="display: none;">Save Selected Color</button>
@@ -66,6 +72,7 @@
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
+        const zoomCanvas = document.getElementById('zoomCanvas'); // Zoom area canvas
         const startButton = document.getElementById('startButton');
         const setupButton = document.getElementById('setupButton');
         const toggleCameraButton = document.getElementById('toggleCamera');
@@ -154,11 +161,12 @@
             }
         }
 
-        // Color Detection
+        // Color Detection with Zoom Area
         function detectColor() {
             if (!detectionActive) return;
 
             const context = canvas.getContext('2d');
+            const zoomContext = zoomCanvas.getContext('2d');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             context.drawImage(video, 0, 0, canvas.width, canvas.height);
@@ -166,6 +174,8 @@
 
             let differentColorDetected = false;
             const tolerance = 50;
+            let zoomX = 0;
+            let zoomY = 0;
 
             for (let i = 0; i < frame.length; i += 4) {
                 const r = frame[i], g = frame[i + 1], b = frame[i + 2];
@@ -177,11 +187,26 @@
                     Math.abs(b - targetColor.b) >= tolerance
                 ) {
                     differentColorDetected = true;
+                    const pixelIndex = i / 4;
+                    zoomX = pixelIndex % canvas.width;
+                    zoomY = Math.floor(pixelIndex / canvas.width);
                     break;
                 }
             }
 
-            if (differentColorDetected) playSound();
+            if (differentColorDetected) {
+                playSound();
+                // Draw zoomed-in area
+                const zoomSize = 20; // Size of the zoomed area in original image pixels
+                zoomCanvas.style.display = 'block';
+                zoomContext.drawImage(
+                    video,
+                    zoomX - zoomSize / 2, zoomY - zoomSize / 2, zoomSize, zoomSize, // Source rectangle
+                    0, 0, zoomCanvas.width, zoomCanvas.height                    // Destination rectangle
+                );
+            } else {
+                zoomCanvas.style.display = 'none';
+            }
 
             // Continue detection loop
             detectionInterval = setTimeout(detectColor, 100);
